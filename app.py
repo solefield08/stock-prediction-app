@@ -103,8 +103,8 @@ def remove_favorite_from_db(name):
 # --- AI 고속 트렌드 분석 엔진 ---
 def run_prediction(df_prices):
   try:
-    if df_prices is None or len(df_prices) < 10:
-      return 100.0, 105.0, 110.0, 70.0, 110.0
+    if df_prices is None or len(df_prices) < 5:
+      return 100.0, 105.0, 110.0, 75.0, 110.0
     curr_price = float(df_prices["Close"].iloc[-1])
     recent_return = float(
         (curr_price - df_prices["Close"].iloc[-min(30, len(df_prices))])
@@ -116,11 +116,11 @@ def run_prediction(df_prices):
     p_12m = curr_price * (1.0 + (recent_return * 1.8))
 
     change_rate = ((p_12m - curr_price) / curr_price) * 100
-    ai_prob = int(min(95, max(40, 60 + change_rate * 0.7)))
+    ai_prob = int(min(95, max(45, 65 + change_rate * 0.7)))
     ai_growth = int(105 + abs(change_rate))
     return float(p_3m), float(p_6m), float(p_12m), float(ai_prob), float(ai_growth)
   except:
-    return 100.0, 105.0, 110.0, 70.0, 110.0
+    return 100.0, 105.0, 110.0, 75.0, 110.0
 
 
 @st.cache_data(ttl=3600)
@@ -149,34 +149,48 @@ def fetch_stocks(theme_name):
           else "1조원 이상"
       )
 
-      hist = fdr.DataReader(code, "2025-09-01")
-      if not hist.empty:
-        close_p = float(hist["Close"].iloc[-1])
-        p3, p6, p12, prob, growth = run_prediction(hist)
-        kr_results.append({
-            "code": code,
-            "market": "KR",
-            "name": name,
-            "price": f"{int(close_p):,}원",
-            "p3m": f"{int(p3):,}원",
-            "p6m": f"{int(p6):,}원",
-            "p12m": f"{int(p12):,}원",
-            "cap": cap,
-            "reason": f"고속 AI 트렌드 분석 (확률 {prob:.0f}%)",
-            "risk": "업황 및 금리 리스크",
-            "prob": f"{prob:.0f}%",
-            "growth": f"{growth}%",
-            "accuracy": "91.2%",
-        })
+      try:
+        hist = fdr.DataReader(code, "2025-09-01")
+        if not hist.empty:
+          close_p = float(hist["Close"].iloc[-1])
+          p3, p6, p12, prob, growth = run_prediction(hist)
+          kr_results.append({
+              "code": code,
+              "market": "KR",
+              "name": name,
+              "price": f"{int(close_p):,}원",
+              "p3m": f"{int(p3):,}원",
+              "p6m": f"{int(p6):,}원",
+              "p12m": f"{int(p12):,}원",
+              "cap": cap,
+              "reason": f"고속 AI 트렌드 분석 (확률 {prob:.0f}%)",
+              "risk": "업황 및 금리 리스크",
+              "prob": f"{prob:.0f}%",
+              "growth": f"{growth}%",
+              "accuracy": "91.2%",
+          })
+      except:
+        continue
   except Exception as e:
     print(f"KR Error: {e}")
 
-  # 2. 미국 시장 스캔 (에러 발생 시 무시하고 안전하게 진행되도록 개별 try-except 적용)
-  us_pool = ["XOM", "CVX", "AAPL", "MSFT", "NVDA", "TSLA"]
+  # 2. 미국 시장 스캔 (안정적으로 여러 대장주가 뜨도록 풀 구성)
+  us_pool = [
+      "AAPL",
+      "MSFT",
+      "NVDA",
+      "TSLA",
+      "AMZN",
+      "GOOGL",
+      "META",
+      "XOM",
+      "CVX",
+      "NFLX",
+  ]
   for ticker in us_pool:
     try:
       stock = yf.Ticker(ticker)
-      hist = stock.history(period="6m")
+      hist = stock.history(period="3m")
       if hist is not None and not hist.empty:
         close_p = float(hist["Close"].iloc[-1])
         p3, p6, p12, prob, growth = run_prediction(hist)
@@ -198,24 +212,6 @@ def fetch_stocks(theme_name):
     except Exception as e:
       print(f"US Ticker {ticker} Error: {e}")
       continue
-
-  # 만약 미국 주식 데이터 수집이 완전히 실패할 경우를 대비한 안전 가드 기본 데이터
-  if not us_results:
-    us_results.append({
-        "code": "AAPL",
-        "market": "US",
-        "name": "AAPL (Global)",
-        "price": "$180.00",
-        "p3m": "$190.00",
-        "p6m": "$205.00",
-        "p12m": "$230.00",
-        "cap": "글로벌 대장주",
-        "reason": "AI 트렌드 분석 (기본 대체 데이터)",
-        "risk": "환율 리스크",
-        "prob": "85%",
-        "growth": "125%",
-        "accuracy": "90.5%",
-    })
 
   return kr_results, us_results
 
@@ -257,7 +253,7 @@ if selected_theme == "나만의 관심종목":
         })
       else:
         stock = yf.Ticker(fav["code"])
-        hist = stock.history(period="6m")
+        hist = stock.history(period="3m")
         close_p = float(hist["Close"].iloc[-1])
         p3, p6, p12, prob, growth = run_prediction(hist)
         us_data.append({
@@ -352,4 +348,4 @@ with tab2:
       save_favorite_to_db(target, target["code"], "US")
       st.success(f"'{selected_us_name}'이(가) 관심종목 DB에 저장되었습니다!")
   else:
-    st.info("미국 데이터 수집 중 일시적 지연이 발생했습니다.")
+    st.info("미국 데이터 수집 중입니다. 잠시 후 새로고침 해보세요.")
